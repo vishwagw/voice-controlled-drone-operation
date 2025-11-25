@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Voice-Activated Drone Control - Demo</title>
+  <!-- Tailwind (play CDN for quick demo) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-white">
+  <div id="root"></div>
+
+  <!-- React + ReactDOM (UMD builds) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <!-- Babel for in-browser JSX transpile (for demo only) -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const IconRadio = ({ size = 24, className = '' }) => (
+      <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 3C8.134 3 5 6.134 5 10C5 11.036 5.177 12.03 5.5 12.94" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M12 7C10.347 7 9 8.347 9 10C9 11.653 10.347 13 12 13C13.653 13 15 11.653 15 10C15 8.347 13.653 7 12 7Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    );
+
+    const IconMic = ({ size = 24 }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 1v11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <rect x="8" y="1" width="8" height="12" rx="4" stroke="currentColor" strokeWidth="1.5"/>
+        <path d="M19 12v1a7 7 0 01-14 0v-1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    );
+
+    const IconMicOff = ({ size = 24 }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2 2l20 20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <rect x="8" y="1" width="8" height="12" rx="4" stroke="currentColor" strokeWidth="1.5"/>
+        <path d="M19 12v1a7 7 0 01-9.3 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    );
+
+    const IconAlert = ({ size = 20 }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M12 9v4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M12 17h.01" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    );
+
+    function DroneSimulator() {
+      const [droneState, setDroneState] = useState({ armed: false, flying: false, altitude: 0, propellerSpeed: 0 });
+      const [isListening, setIsListening] = useState(false);
+      const [lastCommand, setLastCommand] = useState('');
+      const [logs, setLogs] = useState([]);
+      const [recognition, setRecognition] = useState(null);
+
+      const canvasRef = useRef(null);
+      const animationRef = useRef(null);
+      const propellerRotation = useRef(0);
+
+      useEffect(() => {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SpeechRecognition) {
+          const recognitionInstance = new SpeechRecognition();
+          recognitionInstance.continuous = true;
+          recognitionInstance.interimResults = false;
+          recognitionInstance.lang = 'en-US';
+
+          recognitionInstance.onresult = (event) => {
+            const transcript = event.results[event.results.length - 1][0].transcript.toLowerCase().trim();
+            processCommand(transcript);
+          };
+
+          recognitionInstance.onerror = (event) => {
+            addLog(`Speech recognition error: ${event.error}`, 'error');
+            setIsListening(false);
+          };
+
+          recognitionInstance.onend = () => {
+            if (isListening) {
+              try { recognitionInstance.start(); } catch(e) { /* ignore */ }
+            }
+          };
+
+          setRecognition(recognitionInstance);
+        } else {
+          addLog('Speech recognition not supported in this browser', 'error');
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
+
+      const addLog = (message, type = 'info') => {
+        const timestamp = new Date().toLocaleTimeString();
+        setLogs(prev => [...prev.slice(-9), { message, type, timestamp }]);
+      };
+
+      const processCommand = (command) => {
+        setLastCommand(command);
+        addLog(`Command received: "${command}"`, 'command');
+
+        if (command.includes('arm')) {
+          armDrone();
+        } else if (command.includes('take off') || command.includes('takeoff')) {
+          takeOff();
+        } else if (command.includes('land')) {
+          land();
+        } else if (command.includes('disarm')) {
+          disarmDrone();
+        } else {
+          addLog(`Unknown command: "${command}"`, 'warning');
+        }
+      };
+
+      const armDrone = () => {
+        setDroneState(prev => {
+          if (!prev.armed) {
+            addLog('✓ Drone ARMED - Propellers spinning', 'success');
+            return { ...prev, armed: true, propellerSpeed: 30 };
+          }
+          addLog('Drone already armed', 'warning');
+          return prev;
+        });
+      };
+
+      const disarmDrone = () => {
+        setDroneState(prev => {
+          if (prev.armed && !prev.flying) {
+            addLog('✓ Drone DISARMED', 'success');
+            return { ...prev, armed: false, propellerSpeed: 0 };
+          } else if (prev.flying) {
+            addLog('Cannot disarm while flying! Land first.', 'error');
+          }
+          return prev;
+        });
+      };
+
+      const takeOff = () => {
+        setDroneState(prev => {
+          if (!prev.armed) {
+            addLog('Cannot take off - Drone not armed!', 'error');
+            return prev;
+          }
+          if (prev.flying) {
+            addLog('Drone already flying', 'warning');
+            return prev;
+          }
+
+          addLog('✓ Taking off...', 'success');
+          // start ascent animation local to this call
+          let currentAlt = 0;
+          const targetAlt = 50;
+          const interval = setInterval(() => {
+            currentAlt += 2;
+            if (currentAlt >= targetAlt) {
+              currentAlt = targetAlt;
+              clearInterval(interval);
+              addLog(`✓ Hovering at ${targetAlt}m altitude`, 'success');
+            }
+            setDroneState(prevState => ({ ...prevState, altitude: currentAlt }));
+          }, 50);
+
+          return { ...prev, flying: true, propellerSpeed: 100 };
+        });
+      };
+
+      const land = () => {
+        setDroneState(prev => {
+          if (!prev.flying) {
+            addLog('Drone is not flying', 'warning');
+            return prev;
+          }
+
+          addLog('✓ Landing...', 'success');
+
+          let currentAlt = prev.altitude;
+          const interval = setInterval(() => {
+            currentAlt -= 2;
+            if (currentAlt <= 0) {
+              currentAlt = 0;
+              clearInterval(interval);
+              setDroneState(prevState => ({ ...prevState, flying: false, altitude: 0, propellerSpeed: 30 }));
+              addLog('✓ Landed safely', 'success');
+            } else {
+              setDroneState(prevState => ({ ...prevState, altitude: currentAlt }));
+            }
+          }, 50);
+
+          return prev; // state updates handled in interval
+        });
+      };
+
+      const toggleListening = () => {
+        if (!recognition) {
+          addLog('Speech recognition not available', 'error');
+          return;
+        }
+
+        if (isListening) {
+          recognition.stop();
+          setIsListening(false);
+          addLog('Voice control stopped', 'info');
+        } else {
+          try { recognition.start(); } catch(e) { /* ignore startup errors */ }
+          setIsListening(true);
+          addLog('Voice control activated - listening...', 'info');
+        }
+      };
+
+      // Draw drone on canvas
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width = canvas.clientWidth;
+        const height = canvas.height = canvas.clientHeight;
+
+        const animate = () => {
+          ctx.clearRect(0, 0, width, height);
+
+          // Ground
+          ctx.fillStyle = '#4ade80';
+          ctx.fillRect(0, height - 30, width, 30);
+          ctx.fillStyle = '#22c55e';
+          for (let i = 0; i < width; i += 40) {
+            ctx.fillRect(i, height - 30, 20, 30);
+          }
+
+          // Altitude lines
+          ctx.strokeStyle = '#e5e7eb';
+          ctx.lineWidth = 1;
+          for (let i = 50; i <= 100; i += 50) {
+            const y = height - 30 - (i * 2);
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+            ctx.fillStyle = '#9ca3af';
+            ctx.font = '12px monospace';
+            ctx.fillText(`${i}m`, 10, y - 5);
+          }
+
+          // Calculate drone position
+          const droneY = height - 30 - (droneState.altitude * 2) - 40;
+          const droneX = width / 2;
+
+          // Propeller rotation
+          if (droneState.propellerSpeed > 0) {
+            propellerRotation.current += droneState.propellerSpeed / 10;
+          }
+
+          // Draw drone
+          const drawPropeller = (x, y) => {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate((propellerRotation.current * Math.PI) / 180);
+            ctx.strokeStyle = droneState.armed ? '#3b82f6' : '#9ca3af';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(-15, 0);
+            ctx.lineTo(15, 0);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(0, -15);
+            ctx.lineTo(0, 15);
+            ctx.stroke();
+            ctx.restore();
+          };
+
+          // Drone body
+          ctx.fillStyle = droneState.armed ? '#1e40af' : '#6b7280';
+          ctx.fillRect(droneX - 30, droneY - 10, 60, 20);
+
+          // Arms
+          ctx.strokeStyle = droneState.armed ? '#1e40af' : '#6b7280';
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(droneX - 30, droneY);
+          ctx.lineTo(droneX - 50, droneY - 20);
+          ctx.moveTo(droneX + 30, droneY);
+          ctx.lineTo(droneX + 50, droneY - 20);
+          ctx.stroke();
+
+          // Propellers
+          drawPropeller(droneX - 50, droneY - 20);
+          drawPropeller(droneX + 50, droneY - 20);
+
+          // Status LED
+          ctx.fillStyle = droneState.armed ? '#22c55e' : '#ef4444';
+          ctx.beginPath();
+          ctx.arc(droneX, droneY, 5, 0, Math.PI * 2);
+          ctx.fill();
+
+          animationRef.current = requestAnimationFrame(animate);
+        };
+
+        animate();
+
+        return () => {
+          if (animationRef.current) cancelAnimationFrame(animationRef.current);
+        };
+      }, [droneState]);
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 text-white p-6">
+          <div className="max-w-7xl mx-auto">
+            <div className="mb-8 text-center">
+              <h1 className="text-4xl font-bold mb-2 flex items-center justify-center gap-3">
+                <span className="text-blue-400" style={{display:'inline-flex'}}><IconRadio size={40} /></span>
+                Voice-Activated Drone Control
+              </h1>
+              <p className="text-slate-400">Speak commands: "Arm", "Take off", "Land", "Disarm"</p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Main Simulator */}
+              <div className="lg:col-span-2 bg-slate-800 rounded-lg shadow-xl p-6">
+                <div style={{width:'100%', height: '400px'}}>
+                  <canvas ref={canvasRef} style={{width:'100%', height:'100%'}} className="w-full border-2 border-slate-700 rounded-lg bg-sky-100" />
+                </div>
+
+                <div className="mt-4 grid grid-cols-4 gap-4">
+                  <div className="bg-slate-700 p-3 rounded text-center">
+                    <div className="text-slate-400 text-sm">Status</div>
+                    <div className={`font-bold ${droneState.armed ? 'text-green-400' : 'text-red-400'}`}>
+                      {droneState.armed ? 'ARMED' : 'DISARMED'}
+                    </div>
+                  </div>
+                  <div className="bg-slate-700 p-3 rounded text-center">
+                    <div className="text-slate-400 text-sm">Flight</div>
+                    <div className={`font-bold ${droneState.flying ? 'text-blue-400' : 'text-slate-400'}`}>
+                      {droneState.flying ? 'FLYING' : 'GROUNDED'}
+                    </div>
+                  </div>
+                  <div className="bg-slate-700 p-3 rounded text-center">
+                    <div className="text-slate-400 text-sm">Altitude</div>
+                    <div className="font-bold text-cyan-400">{droneState.altitude.toFixed(0)}m</div>
+                  </div>
+                  <div className="bg-slate-700 p-3 rounded text-center">
+                    <div className="text-slate-400 text-sm">Propellers</div>
+                    <div className="font-bold text-purple-400">{droneState.propellerSpeed}%</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Control Panel */}
+              <div className="space-y-6">
+                {/* Voice Control */}
+                <div className="bg-slate-800 rounded-lg shadow-xl p-6">
+                  <h2 className="text-xl font-bold mb-4">Voice Control</h2>
+                  <button
+                    onClick={toggleListening}
+                    className={`w-full py-4 rounded-lg font-bold text-lg flex items-center justify-center gap-3 transition-all ${isListening ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'}`}>
+                    <span>{isListening ? <IconMicOff size={24} /> : <IconMic size={24} />}</span>
+                    {isListening ? 'Stop Listening' : 'Start Voice Control'}
+                  </button>
+
+                  {lastCommand && (
+                    <div className="mt-4 p-3 bg-slate-700 rounded">
+                      <div className="text-sm text-slate-400">Last Command:</div>
+                      <div className="font-mono text-green-400">"{lastCommand}"</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Manual Controls */}
+                <div className="bg-slate-800 rounded-lg shadow-xl p-6">
+                  <h2 className="text-xl font-bold mb-4">Manual Override</h2>
+                  <div className="space-y-2">
+                    <button onClick={armDrone} disabled={droneState.armed} className="w-full py-2 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded font-semibold transition-colors">Arm</button>
+                    <button onClick={takeOff} disabled={!droneState.armed || droneState.flying} className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded font-semibold transition-colors">Take Off</button>
+                    <button onClick={land} disabled={!droneState.flying} className="w-full py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded font-semibold transition-colors">Land</button>
+                    <button onClick={disarmDrone} disabled={!droneState.armed || droneState.flying} className="w-full py-2 bg-red-600 hover:bg-red-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded font-semibold transition-colors">Disarm</button>
+                  </div>
+                </div>
+
+                {/* System Log */}
+                <div className="bg-slate-800 rounded-lg shadow-xl p-6">
+                  <h2 className="text-xl font-bold mb-4">System Log</h2>
+                  <div className="space-y-1 font-mono text-sm h-48 overflow-y-auto">
+                    {logs.map((log, i) => (
+                      <div key={i} className={""} style={{color: log.type === 'error' ? '#fb7185' : log.type === 'success' ? '#86efac' : log.type === 'warning' ? '#facc15' : log.type === 'command' ? '#67e8f9' : '#94a3b8'}}>
+                        <span style={{color:'#64748b'}}>[{log.timestamp}]</span> {log.message}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Info Banner */}
+            <div className="mt-6 bg-blue-900/30 border border-blue-500/50 rounded-lg p-4 flex items-start gap-3">
+              <div className="text-blue-400 flex-shrink-0 mt-1"><IconAlert /></div>
+              <div className="text-sm text-slate-300"><strong>Note:</strong> This simulator uses the Web Speech API for voice recognition. Make sure to allow microphone access when prompted. Voice commands work best in Chrome/Edge browsers.</div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<DroneSimulator />);
+  </script>
+
+  <!-- Usage instructions (visible when opening file) -->
+  <!-- Open this file in Chrome or Edge, allow microphone access, and press "Start Voice Control". -->
+</body>
+</html>
