@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Drone Voice Control Simulator</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Drone Voice Control Simulator</h1>
+    <div class="controls">
+      <button id="start-voice">Start Voice Recognition</button>
+      <button id="stop-voice" disabled>Stop Recognition</button>
+      <input id="alt-input" type="number" value="3" min="0" step="0.5" />
+      <button id="btn-arm">Arm</button>
+      <button id="btn-takeoff">Take Off</button>
+      <button id="btn-hover">Hover</button>
+      <button id="btn-set-alt">Set Altitude</button>
+      <button id="btn-land">Land</button>
+    </div>
+
+    <div class="state">
+      <div><strong>Armed:</strong> <span id="armed">false</span></div>
+      <div><strong>Motors:</strong> <span id="motors">off</span></div>
+      <div><strong>Altitude:</strong> <span id="altitude">0.0</span> m</div>
+      <div><strong>Target:</strong> <span id="target">0.0</span> m</div>
+    </div>
+
+    <canvas id="sim" width="600" height="300"></canvas>
+
+    <div class="manual">
+      <input id="manual-cmd" placeholder="type command: arm / takeoff / land" />
+      <button id="send-manual">Send</button>
+    </div>
+
+    <p class="notes">Use the 'Start Voice Recognition' button and say: "arm", "take off" or "land".</p>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

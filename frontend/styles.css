@@ -1,0 +1,8 @@
+body { font-family: Arial, sans-serif; background: #f5f7fb; color: #222; }
+.container { max-width: 820px; margin: 24px auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,0.06); }
+.controls { display:flex; gap:8px; align-items:center; margin-bottom:12px; }
+.controls button, .controls input { padding:8px 10px; font-size:14px; }
+.state { display:flex; gap:16px; margin-bottom:12px; }
+#sim { width:100%; background: linear-gradient(#a7d7ff, #fff); border:1px solid #ddd; border-radius:6px; }
+.manual { margin-top:12px; }
+.notes { color:#666; font-size:13px; }
